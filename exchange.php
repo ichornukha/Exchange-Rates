@@ -1,48 +1,128 @@
 <?php
 
+/**
+ * Class Rates
+ */
+class Rates{
 
-$printingText = validate();
-$ch = curl_init('http://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?valcode=USD&date='.getDateForAPI().'&json');
-curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-$result = curl_exec($ch);
-curl_close($ch);
-$r = json_decode($result, true);
-$r = $r[0];
-echo $r[$printingText].": ".round($r['rate'],2)." грн.\n";
+	private $date = '';
+    private $url  = 'http://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?';
+	private $printingText = '';
+    private $valcode = 'USD';
+    private $response = [];
 
+	/**
+	 * Rates constructor.
+     * @var string $date
+	 */
+	public function __construct($date)
+	{      $date = strtotime($date);
 
-function getDateForAPI()
-{
-	$weekDay = date('N');
-	switch ($weekDay) {
-		case 7:
-			return date('Ymd', strtotime('-2day'));
-			break;
-		case 6:
-			return date('Ymd', strtotime('-1day'));
-			break;
-		default:
-			return date('Ymd');
-			break;
+		if (!$date){
+			$this->date = $this->getDateForAPI();
+		}else{
+			$this->date = $date;
+		}
+		$this->printingText = $this->validate();
+
 	}
+
+	private function getDateForAPI()
+	{
+		$weekDay = date('N');
+		switch ($weekDay) {
+			case 7:
+				return date('Ymd', strtotime('-2day'));
+				break;
+			case 6:
+				return date('Ymd', strtotime('-1day'));
+				break;
+			default:
+				return date('Ymd');
+				break;
+		}
+
+	}
+
+
+	private function validate(){
+		$arguments = $_SERVER['argv'];
+		$flag = @$arguments[1];
+		switch ($flag){
+			case('--code'):
+				return 'r030';
+			case('--full'):
+				return 'txt';
+			default:
+				return 'cc';
+		}
+
+
+	}
+
+	public function getData(){
+	    try{
+            $result = (new Curl(['url'=>$this->url, 'date'=> $this->date, 'valcode'=>$this->valcode,]))->get();
+        }catch (InvalidArgumentException $ex){
+            $result = [];
+        }
+        $r = json_decode($result, true);
+        $r = $r[0];
+        $this->response = $r;
+        return $this;
+    }
+
+    public function printing(){
+        if (null!==$this->response):
+        $output  = $this->response[$this->printingText];
+        $output .= ': ';
+        $output .= round($this->response['rate'], 2);
+        $output .= ' UAH';
+        $output .= PHP_EOL;
+        else: $output = 'Oops, no rates';
+        endif;
+        echo $output;
+    }
 
 }
 
+class Curl{
 
-function validate(){
-	$arguments = $_SERVER['argv'];
-	$flag = $arguments[1];
-	//var_dump($flag);
-	//die();
-	switch ($flag){
-		case('--code'):
-			return 'r030';
-		case('--full'):
-			return 'txt';
-		default:
-			return 'cc';
-	}
-	
-	
+    private $url    = '';
+    private $format = '&json';
+    private $date   = '';
+    private $valcode = '';
+
+    /**
+     * Curl constructor.
+     * ['url'=>,'date'=> , 'valcode'=>,]
+     * @var array $params.
+     * @throws InvalidArgumentException;
+     */
+    public function __construct($params = [])
+    {
+        if (null !== $params && count($params)!==0 ){
+            $this->date     .= $params['date'];
+            $this->valcode  .= $params['valcode'];
+            $this->url       = $params['url'];
+        }else{
+            throw new InvalidArgumentException('Params must be set.', 400);
+        }
+    }
+
+    public function get(){
+        $requestString = $this->url.http_build_query(['valcode' =>  $this->valcode,
+                                                        'date'  =>  $this->date,]
+                                                        ).$this->format;
+        $chan = curl_init($requestString);
+        curl_setopt($chan, CURLOPT_RETURNTRANSFER, 1);
+        $result = curl_exec($chan);
+        curl_close($chan);
+        return $result;
+
+    }
 }
-?>
+
+$r = (new Rates(''))->getData()->printing();
+
+
