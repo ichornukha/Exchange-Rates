@@ -10,6 +10,8 @@ class Rates{
 	private $printingText = '';
     private $valcode = 'USD';
     private $response = [];
+    private $preDate = '';
+    private $yesterdayRate = [];
 
 	/**
 	 * Rates constructor.
@@ -20,12 +22,15 @@ class Rates{
 
 		if (!$date){
 			$this->date = $this->getDateForAPI();
+            $this->preDate = date('Ymd', strtotime('-1day', strtotime($this->date)));
 		}else{
 			$this->date = $date;
+            $this->preDate = date('Ymd', strtotime('-1day', strtotime($this->date)));
 		}
 		$this->printingText = $this->validate();
 
 	}
+
 
 	private function getDateForAPI()
 	{
@@ -69,17 +74,29 @@ class Rates{
         $r = json_decode($result, true);
         $r = $r[0];
         $this->response = $r;
+        try{
+            $result = (new Curl(['url'=>$this->url, 'date'=> $this->preDate, 'valcode'=>$this->valcode,]))->get();
+        }catch (InvalidArgumentException $ex){
+            $result = [];
+        }
+        $yR =   json_decode($result, true);
+        $yR = $yR[0];
+        $this->yesterdayRate = $yR;
+
         return $this;
     }
 
     public function printing(){
         if (null!==$this->response):
-        $output  = $this->response[$this->printingText];
-        $output .= ': ';
-        $output .= round($this->response['rate'], 2);
-        $output .= ' UAH';
-        $output .= PHP_EOL;
-        else: $output = 'Oops, no rates';
+            $output  = $this->response[$this->printingText];
+            $output .= ': ';
+            $output .= round($this->response['rate'], 2);
+            $output .= ' UAH';
+            $output .= ($this->response['rate'] > $this->yesterdayRate['rate'])?'↑':'↓';
+            $output .= '('.round($this->yesterdayRate['rate'], 2).')';
+            $output .= PHP_EOL;
+        else:
+            $output = 'Oops, no rates';
         endif;
         echo $output;
     }
@@ -114,7 +131,7 @@ class Curl{
         $requestString = $this->url.http_build_query(['valcode' =>  $this->valcode,
                                                         'date'  =>  $this->date,]
                                                         ).$this->format;
-        $chan = curl_init($requestString);
+		$chan = curl_init($requestString);
         curl_setopt($chan, CURLOPT_RETURNTRANSFER, 1);
         $result = curl_exec($chan);
         curl_close($chan);
